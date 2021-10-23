@@ -541,7 +541,6 @@ class Parse:
           break
     else:
       params = None
-    assert self.toks[0] is not _l_t.cparen
     return target,params
 
   def _parse_codbod(self):
@@ -608,16 +607,14 @@ class Executor:
   def current(self):
     return self._bref.ref
         
-def run(text,env,midfunc=lambda:None):
-  tmp = SSIE(env,Parse(text))
-  env.Engine.Init(tmp)
-  while env.Engine.cycle():midfunc()
-  del tmp
-
    
 if __name__ == "__main__":
   genv = type("SPOLGENV",(dict,),{"Engine":Executor()})()
   Engine = genv.Engine
   
-  
-  
+  def run(text,env=genv,midfunc=lambda:None):
+    tmp = SSIE(env,Parse(text))
+    env.Engine.Init(tmp)
+    while env.Engine.cycle():midfunc()
+    del tmp
+
