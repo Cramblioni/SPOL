@@ -10,13 +10,14 @@
 ##	| "[" expr ["," expr]* "]" // list
 ##
 ##
-##nexpr ::= name ["$" name]*
+##nexpr ::= name ["$" expr4]*
 ##
 ##expr4 ::= atom
 ##	| nexpr
 ##	| "-" expr4
 ##	| "!" expr4
 ##	| "(" expr ")"
+##      | ("^" | "#") expr4
 ##
 ##expr3 ::= expr4 [("*" | "/") expr4]*
 ##expr2 ::= expr3 [("+" | "-")  expr3]*
@@ -92,6 +93,8 @@ _l_rules = (
               ("condit" ,r"(\?)"),
               ("colon"  ,r"(\:)"),
               ("fwslsh" ,r"(\/)"),
+              ("acen"   ,r"(\^)"),
+              ("hash"   ,r"(\#)"),
               
               ("oparen" ,r"(\()"),
               ("cparen" ,r"(\))"),
@@ -124,7 +127,7 @@ def _Lexer(text):
       res = re.match(r,text)
       if res:
         text = text[res.span()[1]:]
-        out.append(lToken(_l_t[rn],res.group(0)))
+        out.append(lToken(_l_t[rn],res.group(1)))
         break
     else:
       raise SyntaxError("Unrecognised syntax")
@@ -209,6 +212,20 @@ class Not(UnOp):
   def get(self,env):
     return not self.child.get(env)
 
+class StackOp(UnOp):
+  def __init__(self,child):
+    self.child = child
+  def get(self,env):
+    return self.child.get(env).pop()
+  def set(self,value,env):
+    return self.child.get(env).append(value.get(env))
+
+class LenOp(UnOp):
+  def __init__(self,child):
+    self.child = child
+  def get(self,env):
+    return len(self.child.get(env))
+  
 # Deriving Literal classes As Unary Operators
 class Var(UnOp):
   def __init__(self,name):
@@ -324,6 +341,12 @@ class While(Command):
     tmp.env = er.env
     env.Engine.addsingle(tmp)
     
+class Dist(Command):
+  def __init__(self,statements):
+    self.statements = statements
+  def exec(self,env):
+    env.Engine.addmany([SSIE(env,i) for i in self.statements])
+    next(env.Engine.node)
     
   
 # Base Dataclasses 
@@ -410,7 +433,13 @@ class Parse:
         return ExecuteSingle(*self._parse_stExec())
     elif self.toks[0].type is _l_t.pound:
       return self._parse_atom()
-    
+    elif self.toks[0].type is _l_t.osqrbr:
+      self.toks.pop(0)
+      tmp = []
+      while self.toks[0].type is not _l_t.csqrbr:
+        tmp.append(self._parse_codbod())
+      self.toks.pop(0)
+      return Dist(tmp)
     else:
       if self.toks[0].type is _l_t.name:
         if self.toks[0].lexeme == "print":
@@ -441,6 +470,17 @@ class Parse:
       return Raw(eval(tmp.lexeme))
     elif tmp.type is _l_t.string:
       return Raw(tmp.lexeme)
+    elif tmp.type is _l_t.osqrbr:
+      if self.toks[0].type is _l_t.csqrbr:
+        self.toks.pop(0)
+        return List([])
+      
+      expr = []
+      while self.toks:
+        expr.append(self._parse_expr())
+        if self.toks.pop(0).type is not _l_t.comma:
+          break
+      return List(expr)
     elif tmp.type is _l_t.pound:
       # name
       if self.toks[0].type is _l_t.name:
@@ -486,6 +526,12 @@ class Parse:
       tmp = self._parse_expr()
       assert self.toks.pop(0).type is _l_t.cparen
       return tmp
+    elif self.toks[0].type is _l_t.acen:
+      self.toks.pop(0)
+      return StackOp(self._parse_expr4())
+    elif self.toks[0].type is _l_t.hash:
+      self.toks.pop(0)
+      return LenOp(self._parse_expr4())
     else:
       return self._parse_atom()
 
@@ -527,7 +573,7 @@ class Parse:
     res = Var(self.toks.pop(0).lexeme)
     while self.toks and self.toks[0].type is _l_t.doller:
       self.toks.pop(0)
-      res = Ind(res,Var(self.toks.pop(0).lexeme))
+      res = Ind(res,self._parse_expr4())
     return res
 
   def _parse_stExec(self):
@@ -606,6 +652,9 @@ class Executor:
   @property
   def current(self):
     return self._bref.ref
+  @property
+  def node(self):
+    return self._bref
         
    
 if __name__ == "__main__":
