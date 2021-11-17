@@ -1,5 +1,6 @@
 # SPOL
 ### Symbolic Process Orientated Language
+# Written in python 3.10, Makes decent use of the new match case syntax
 
 ```
 /*Spol Example*/

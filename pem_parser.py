@@ -140,8 +140,7 @@ class Parser:
       match self.toks.pop(0).type:
         case l_t.assign:
           return Assign(init,self._parse_expr())
-        case l_t.condit:
-          self.toks.pop(0)
+        case l_t.condit:###
           body = self._parse_codbod()
           if self.toks[0].type is l_t.colon:
             self.toks.pop(0)
